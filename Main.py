@@ -8,7 +8,7 @@ import random
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.8"
+    version = "1.1.9"
     build_date = "7/4/2018"
 
     # Booleans
@@ -127,7 +127,8 @@ class HatchiBot(sc2.BotAI):
         return self.supply_left >= 2 and \
                self.can_afford(ZEALOT) and \
                self.units(ZEALOT).amount < self.max_zealots and \
-               self.units(ZEALOT).amount < self.soft_max_zealots()
+               self.units(ZEALOT).amount < self.soft_max_zealots() and \
+               self.units(STALKER).ready.amount >= 2
 
     def can_train_stalker(self):
         return self.supply_left >= 2 and \
@@ -183,6 +184,14 @@ class HatchiBot(sc2.BotAI):
                buildings < (1 + ((self.units(NEXUS).ready.amount - 1) * 3)) and \
                self.can_afford(GATEWAY)
 
+    def can_build_cyberneticscore(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(GATEWAY).ready.amount > 0 and \
+               self.units(CYBERNETICSCORE).amount < 1 and \
+               self.can_afford(CYBERNETICSCORE) and not \
+               self.already_pending(CYBERNETICSCORE) and not \
+               self.fast_expand
+
     async def build_worker(self):
         for nexus in self.units(NEXUS).ready.noqueue:
             if self.can_train_probe():
@@ -218,8 +227,8 @@ class HatchiBot(sc2.BotAI):
 
     async def build_gateway(self):
         if self.units(PYLON).ready.amount > 0:
-            pylon = self.units(PYLON).ready.random
             if self.can_build_gateway():
+                pylon = self.units(PYLON).ready.random
                 if self.units(CYBERNETICSCORE).amount > 0:
                     await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
                 else:
@@ -227,12 +236,9 @@ class HatchiBot(sc2.BotAI):
                         await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_cybernetics_core(self):
-        if self.units(PYLON).ready.amount > 0 and self.units(GATEWAY).ready.amount > 0:
-            if self.units(CYBERNETICSCORE).ready.amount < 1 and not self.already_pending(CYBERNETICSCORE):
-                if self.can_afford(CYBERNETICSCORE):
-                    if not self.fast_expand:
-                        pylon = self.units(PYLON).ready.random
-                        await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 5))
+        if self.can_build_cyberneticscore():
+            pylon = self.units(PYLON).ready.random
+            await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_twilight_council(self):
         if self.units(PYLON).ready.amount > 0 and self.units(CYBERNETICSCORE).ready.amount > 0:
