@@ -8,8 +8,8 @@ import random
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.6"
-    build_date = "7/3/2018"
+    version = "1.1.8"
+    build_date = "7/4/2018"
 
     # Booleans
     message_sent = False
@@ -48,7 +48,7 @@ class HatchiBot(sc2.BotAI):
         if not self.message_sent:
             await self.message_send()
             self.message_sent = True
-        if iteration == 1 or iteration == 2 or iteration == 3:
+        if iteration == 1:
             await self.distribute_workers()
         else:
             if iteration % 3 == 0:
@@ -294,8 +294,10 @@ class HatchiBot(sc2.BotAI):
         else:
             for warpgate in self.units(WARPGATE).ready:
                 if self.can_train_zealot():
-                    await self.warp_new_units(warpgate, self.units(PYLON).closest_to(self.reposition_location),
-                                              unit=ZEALOT, warpId=AbilityId.WARPGATETRAIN_ZEALOT)
+                    await self.warp_new_units(warpgate,
+                                              self.closest_pylon_to_reposition_location(),
+                                              unit=ZEALOT,
+                                              warpId=AbilityId.WARPGATETRAIN_ZEALOT)
 
     async def build_stalkers(self):
         if len(self.units(WARPGATE).ready) < 1:
@@ -305,8 +307,10 @@ class HatchiBot(sc2.BotAI):
         else:
             for warpgate in self.units(WARPGATE).ready:
                 if self.can_train_stalker():
-                    await self.warp_new_units(warpgate, self.units(PYLON).closest_to(self.reposition_location),
-                                              unit=STALKER, warpId=AbilityId.WARPGATETRAIN_STALKER)
+                    await self.warp_new_units(warpgate,
+                                              self.closest_pylon_to_reposition_location(),
+                                              unit=STALKER,
+                                              warpId=AbilityId.WARPGATETRAIN_STALKER)
 
     async def build_sentries(self):
         if len(self.units(WARPGATE).ready) < 1:
@@ -316,8 +320,10 @@ class HatchiBot(sc2.BotAI):
         else:
             for warpgate in self.units(WARPGATE).ready:
                 if self.can_train_sentry():
-                    await self.warp_new_units(warpgate, self.units(PYLON).closest_to(self.reposition_location),
-                                              unit=SENTRY, warpId=AbilityId.WARPGATETRAIN_SENTRY)
+                    await self.warp_new_units(warpgate,
+                                              self.closest_pylon_to_reposition_location(),
+                                              unit=SENTRY,
+                                              warpId=AbilityId.WARPGATETRAIN_SENTRY)
 
     async def build_observers(self):
         for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
@@ -385,6 +391,9 @@ class HatchiBot(sc2.BotAI):
 
     def closest_nexus_to_enemy(self):
         return self.units(NEXUS).closest_to(self.enemy_start_locations[0]).position
+
+    def closest_pylon_to_reposition_location(self):
+        return self.units(PYLON).ready.closest_to(self.enemy_start_locations[0].position)
 
     def reposition_location(self):
         return self.game_info.map_center.towards(self.closest_nexus_to_enemy(), 120 / self.units(NEXUS).amount)
@@ -479,15 +488,10 @@ class HatchiBot(sc2.BotAI):
             self.attacking = False
             await self.retreat()
             return
-        if len(self.total_attacking_units()) > 25:
+        if len(self.total_attacking_units()) > 15:
             self.attacking = True
-            if len(self.total_attacking_units()) > 10 and not self.should_we_retreat():
-                for s in self.get_attacking_units():
-                    await self.do(s.attack(self.find_target(self.state)))
-            else:
-                self.attacking = False
-                if await self.should_we_retreat():
-                    await self.retreat()
+            for s in self.get_attacking_units():
+                await self.do(s.attack(self.find_target(self.state)))
 
     async def defend(self):
         if not self.attacking:
@@ -526,5 +530,6 @@ if __name__ == '__main__':
 
     run_game(maps.get(random.choice(Maps)), [
         Bot(race=Race.Protoss, ai=HatchiBot()),
-        Computer(race=random.choice(Races), difficulty=random.choice(Difficulties))
+        Computer(race=random.choice(Races),
+                 difficulty=random.choice(Difficulties))
         ], realtime=True)
