@@ -38,7 +38,7 @@ class HatchiBot(sc2.BotAI):
     # Hard cap - Max Buildings
     max_gateways = 10
     max_robotics_facility = 2
-    max_star_gates = 2
+    max_star_gates = 1
 
     async def message_send(self):
         await self.chat_send(f"{self.name} Online - Version {self.version}")
