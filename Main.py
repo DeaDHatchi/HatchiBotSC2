@@ -90,8 +90,8 @@ class HatchiBot(sc2.BotAI):
         await self.attack()
         await self.reposition()
 
-    def soft_max_gateway(self):
-        return self.units(NEXUS).ready.amount * 2
+    def soft_max_gateways(self):
+        return 1 + ((self.units(NEXUS).ready.amount - 1) * 3)
 
     def soft_max_robotics_facility(self):
         return self.units(NEXUS).ready.amount * 1
@@ -181,7 +181,7 @@ class HatchiBot(sc2.BotAI):
     def can_build_gateway(self):
         buildings = self.units(GATEWAY).amount + self.units(WARPGATE).amount
         return buildings < self.max_gateways and \
-               buildings < (1 + ((self.units(NEXUS).ready.amount - 1) * 3)) and \
+               buildings < self.soft_max_gateways() and \
                self.can_afford(GATEWAY)
 
     def can_build_cyberneticscore(self):
@@ -191,6 +191,29 @@ class HatchiBot(sc2.BotAI):
                self.can_afford(CYBERNETICSCORE) and not \
                self.already_pending(CYBERNETICSCORE) and not \
                self.fast_expand
+
+    def can_build_twilight_council(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(CYBERNETICSCORE).ready.amount > 0 and \
+               self.units(TWILIGHTCOUNCIL).ready.amount < 1 and \
+               self.can_afford(TWILIGHTCOUNCIL) and not \
+               self.already_pending(TWILIGHTCOUNCIL)
+
+    def can_build_stargate(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(CYBERNETICSCORE).ready.amount > 0 and \
+               self.units(STARGATE).ready.amount < 1 and \
+               self.units(ROBOTICSFACILITY).ready.amount > 0 and \
+               self.can_afford(STARGATE) and not \
+               self.already_pending(STARGATE)
+
+    def can_build_robotics_facility(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(CYBERNETICSCORE).ready.amount > 0 and \
+               self.units(ROBOTICSFACILITY).ready.amount < self.units(NEXUS).ready.amount and \
+               self.units(ROBOTICSFACILITY).ready.amount < self.max_robotics_facility and \
+               self.can_afford(ROBOTICSFACILITY) and not \
+               self.already_pending(ROBOTICSFACILITY)
 
     async def build_worker(self):
         for nexus in self.units(NEXUS).ready.noqueue:
@@ -241,18 +264,14 @@ class HatchiBot(sc2.BotAI):
             await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_twilight_council(self):
-        if self.units(PYLON).ready.amount > 0 and self.units(CYBERNETICSCORE).ready.amount > 0:
-            if self.units(TWILIGHTCOUNCIL).ready.amount < 1 and not self.already_pending(TWILIGHTCOUNCIL):
-                if self.can_afford(TWILIGHTCOUNCIL):
-                    pylon = self.units(PYLON).ready.random
-                    await self.build(TWILIGHTCOUNCIL, near=pylon.position.towards(self.game_info.map_center, 5))
+        if self.can_build_twilight_council():
+            pylon = self.units(PYLON).ready.random
+            await self.build(TWILIGHTCOUNCIL, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_stargate(self):
-        if self.units(PYLON).ready.amount > 0 and self.units(CYBERNETICSCORE).ready.amount > 0:
-            if self.units(STARGATE).ready.amount < 1 and not self.already_pending(STARGATE):
-                if self.can_afford(STARGATE):
-                    pylon = self.units(PYLON).ready.random
-                    await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center, 5))
+        if self.can_build_stargate():
+            pylon = self.units(PYLON).ready.random
+            await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_robotics_facility(self):
         if self.units(PYLON).ready.amount > 0 and self.units(CYBERNETICSCORE).ready.amount > 0:
