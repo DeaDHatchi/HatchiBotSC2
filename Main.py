@@ -8,7 +8,7 @@ import random
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.11"
+    version = "1.1.12"
     build_date = "7/5/2018"
     debug = True
 
@@ -28,7 +28,7 @@ class HatchiBot(sc2.BotAI):
     regrouping = False
 
     # Hard cap - Max Economy
-    max_active_expansions = 5
+    max_active_expansions = 7
 
     # Hard cap - Max Units
     max_probes = 80
@@ -46,6 +46,9 @@ class HatchiBot(sc2.BotAI):
     max_forges = 2
     max_robotics_facility = 2
     max_star_gates = 1
+
+    # Units
+    number_of_attacking_units = 25
 
     async def message_send(self):
         await self.chat_send(f"{self.name} Online - Version {self.version}")
@@ -409,7 +412,7 @@ class HatchiBot(sc2.BotAI):
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=SENTRY,
-                                              warpId=AbilityId.WARPGATETRAIN_ADEPT)
+                                              warpId=AbilityId.TRAINWARP_ADEPT)
 
     async def build_observers(self):
         for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
@@ -523,118 +526,57 @@ class HatchiBot(sc2.BotAI):
         else:
             return self.enemy_start_locations[0]
 
-    def get_idle_attacking_units(self):
-        attacking_units = []
-        if self.units(STALKER).idle.amount > 0:
-            attacking_units += self.units(STALKER).idle
-        if self.units(ZEALOT).idle.amount > 0:
-            attacking_units += self.units(ZEALOT).idle
-        if self.units(ADEPT).idle.amount > 0:
-            attacking_units += self.units(ADEPT).idle
-        if self.units(OBSERVER).idle.amount > 0:
-            attacking_units += self.units(OBSERVER).idle
-        if self.units(IMMORTAL).idle.amount > 0:
-            attacking_units += self.units(IMMORTAL).idle
-        if self.units(COLOSSUS).idle.amount > 0:
-            attacking_units += self.units(COLOSSUS).idle
-        if self.units(VOIDRAY).idle.amount > 0:
-            attacking_units += self.units(VOIDRAY).idle
-        if self.units(SENTRY).idle.amount > 0:
-            attacking_units += self.units(SENTRY).idle
-        return attacking_units
-
     def get_attacking_units(self):
-        attacking_units = []
-        if self.units(STALKER).idle.amount > 0:
-            attacking_units += self.units(STALKER).idle
-        if self.units(ZEALOT).idle.amount > 0:
-            attacking_units += self.units(ZEALOT).idle
-        if self.units(ADEPT).idle.amount > 0:
-            attacking_units += self.units(ADEPT).idle
-        if self.units(OBSERVER).idle.amount > 0:
-            attacking_units += self.units(OBSERVER).idle
-        if self.units(IMMORTAL).idle.amount > 0:
-            attacking_units += self.units(IMMORTAL).idle
-        if self.units(COLOSSUS).idle.amount > 0:
-            attacking_units += self.units(COLOSSUS).idle
-        if self.units(VOIDRAY).idle.amount > 0:
-            attacking_units += self.units(VOIDRAY).idle
-        if self.units(SENTRY).idle.amount > 0:
-            attacking_units += self.units(SENTRY).idle
-        return attacking_units
+        return self.units(ZEALOT) | \
+               self.units(SENTRY) | \
+               self.units(STALKER) | \
+               self.units(ADEPT) | \
+               self.units(OBSERVER) | \
+               self.units(IMMORTAL) | \
+               self.units(COLOSSUS) | \
+               self.units(VOIDRAY)
+
+    def get_idle_attacking_units(self):
+        return self.get_attacking_units().idle
+
+    def get_ready_idle_attacking_units(self):
+        return self.get_idle_attacking_units().ready
 
     def ready_attacking_units(self):
-        total_units = []
-        if self.units(STALKER).amount > 0:
-            total_units += self.units(STALKER).ready
-        if self.units(ZEALOT).amount > 0:
-            total_units += self.units(ZEALOT).ready
-        if self.units(ADEPT).amount > 0:
-            total_units += self.units(ADEPT).ready
-        if self.units(OBSERVER).amount > 0:
-            total_units += self.units(OBSERVER).ready
-        if self.units(IMMORTAL).amount > 0:
-            total_units += self.units(IMMORTAL).ready
-        if self.units(COLOSSUS).amount > 0:
-            total_units += self.units(COLOSSUS).ready
-        if self.units(VOIDRAY).amount > 0:
-            total_units += self.units(VOIDRAY).ready
-        if self.units(SENTRY).amount > 0:
-            total_units += self.units(SENTRY).ready
-        return total_units
+        return self.get_attacking_units().ready
 
-    def get_all_attacking_units_even_unready(self):
-        total_units = []
-        if self.units(STALKER).amount > 0:
-            total_units += self.units(STALKER)
-        if self.units(ZEALOT).amount > 0:
-            total_units += self.units(ZEALOT)
-        if self.units(ADEPT).amount > 0:
-            total_units += self.units(ADEPT)
-        if self.units(OBSERVER).amount > 0:
-            total_units += self.units(OBSERVER)
-        if self.units(IMMORTAL).amount > 0:
-            total_units += self.units(IMMORTAL)
-        if self.units(COLOSSUS).amount > 0:
-            total_units += self.units(COLOSSUS)
-        if self.units(VOIDRAY).amount > 0:
-            total_units += self.units(VOIDRAY)
-        if self.units(SENTRY).amount > 0:
-            total_units += self.units(SENTRY)
-        return total_units
-
-    async def should_we_retreat(self):
+    def should_we_retreat(self):
         return len(self.get_enemy_threats()) > 5 and \
-               self.total_army_value(self.get_enemy_threats()) > self.total_army_value(self.ready_attacking_units())
+               self.total_army_value(self.get_enemy_threats()) > self.total_army_value(self.ready_attacking_units()) * 1.1
 
     async def attack(self):
-        if await self.should_we_retreat():
+        if self.should_we_retreat():
             if self.attacking:
                 await self.chat_send("Attacking Flag Off!")
                 self.attacking = False
             await self.retreat()
 
             return
-        if len(self.ready_attacking_units()) > 20:
+        if len(self.ready_attacking_units()) > self.number_of_attacking_units:
             if not self.attacking:
                 await self.chat_send("Looks like we are Attacking!")
                 self.retreating = False
                 self.defending = False
                 self.attacking = True
-            for s in self.get_all_attacking_units_even_unready():
+            for s in self.get_attacking_units():
                 await self.do(s.attack(self.find_target(self.state)))
 
     async def defend(self):
         if not self.attacking:
-            if await self.should_we_retreat():
+            if self.should_we_retreat():
                 await self.retreat()
                 return
-            if len(self.get_attacking_units()) > 3:
+            if len(self.get_idle_attacking_units()) > 3:
                 if len(self.enemy_threats(self.known_enemy_units)) > 0:
                     if not self.defending:
                         await self.chat_send("Looks like we are Defending!")
                         self.defending = True
-                    for s in self.get_all_attacking_units_even_unready():
+                    for s in self.get_attacking_units():
                         await self.do(s.attack(self.find_target(self.state)))
                 else:
                     if self.defending:
@@ -643,11 +585,11 @@ class HatchiBot(sc2.BotAI):
 
     async def reposition(self):
         if not self.attacking and not self.defending:
-            if len(self.get_attacking_units()) > 0:
+            if len(self.get_idle_attacking_units()) > 0:
                 if not self.repositioning:
                     self.repositioning = True
                     await self.chat_send("Repositioning Army!")
-                for s in self.ready_attacking_units():
+                for s in self.get_ready_idle_attacking_units():
                     if s.distance_to(self.reposition_location()) > 10:
                         await self.do(s.move(self.reposition_location()))
         else:
@@ -657,13 +599,13 @@ class HatchiBot(sc2.BotAI):
         if not self.retreating:
             await self.chat_send("Retreating Army!")
             self.retreating = True
-        for s in self.get_all_attacking_units_even_unready():
+        for s in self.get_attacking_units():
             if s.distance_to(self.reposition_location()) > 40:
                 await self.do(s.move(self.reposition_location()))
 
     async def regroup(self):
         if self.regrouping:
-            for s in self.get_all_attacking_units_even_unready():
+            for s in self.get_attacking_units():
                 if s.distance_to(self.regroup_location()) > 15:
                     await self.do(s.move(self.regroup_location()))
 
