@@ -20,6 +20,7 @@ class HatchiBot(sc2.BotAI):
     research_blink = False
     research_thermal_lance = False
     research_gravitic_booster = False
+    research_resonating_glaives = False
     attacking = False
     defending = False
     repositioning = False
@@ -42,6 +43,7 @@ class HatchiBot(sc2.BotAI):
 
     # Hard cap - Max Buildings
     max_gateways = 10
+    max_forges = 2
     max_robotics_facility = 2
     max_star_gates = 1
 
@@ -72,6 +74,7 @@ class HatchiBot(sc2.BotAI):
         await self.upgrade_thermal_lance()
         await self.upgrade_zealot_charge()
         await self.upgrade_gravitic_boosters()
+        await self.upgrade_resonating_glaives()
         # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
 
         # Building Tech
@@ -79,6 +82,7 @@ class HatchiBot(sc2.BotAI):
         await self.build_robotics_facility()
         await self.build_twilight_council()
         await self.build_stargate()
+        await self.build_forge()
         await self.build_cybernetics_core()
         await self.build_gateway()
         await self.build_assimilator()
@@ -100,6 +104,9 @@ class HatchiBot(sc2.BotAI):
 
     def soft_max_gateways(self):
         return 1 + ((self.units(NEXUS).ready.amount - 1) * 3)
+
+    def soft_max_forges(self):
+        return self.units(NEXUS).ready.amount / 4
 
     def soft_max_robotics_facility(self):
         return self.units(NEXUS).ready.amount * 1
@@ -185,6 +192,7 @@ class HatchiBot(sc2.BotAI):
 
     def can_build_nexus(self):
         return self.can_afford(NEXUS) and \
+               self.units(PROBE).ready.amount / 15 > self.units(NEXUS).ready.amount and \
                self.units(NEXUS).amount < self.max_active_expansions and not \
                self.already_pending(NEXUS)
 
@@ -200,6 +208,13 @@ class HatchiBot(sc2.BotAI):
         return buildings < self.max_gateways and \
                buildings < self.soft_max_gateways() and \
                self.can_afford(GATEWAY)
+
+    def can_build_forge(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(FORGE).amount < self.max_forges and \
+               self.units(FORGE).amount < self.soft_max_forges() and \
+               self.units(CYBERNETICSCORE).amount > 0 and \
+               self.can_afford(FORGE)
 
     def can_build_cyberneticscore(self):
         return self.units(PYLON).ready.amount > 0 and \
@@ -276,6 +291,11 @@ class HatchiBot(sc2.BotAI):
                 else:
                     if self.units(GATEWAY).amount < 1:
                         await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
+
+    async def build_forge(self):
+        if self.can_build_forge():
+            pylon = self.units(PYLON).ready.random
+            await self.build(FORGE, near=pylon.position.towards(self.game_info.map_center, 5))
 
     async def build_cybernetics_core(self):
         if self.can_build_cyberneticscore():
@@ -381,11 +401,11 @@ class HatchiBot(sc2.BotAI):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
                 await self.morph_warpgate(gateway)
-                if self.can_train_adept():
+                if self.can_train_adepts():
                     await self.do(gateway.train(ADEPT))
         else:
             for warpgate in self.units(WARPGATE).ready:
-                if self.can_train_adept():
+                if self.can_train_adepts():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=SENTRY,
@@ -430,6 +450,15 @@ class HatchiBot(sc2.BotAI):
                     await self.do(tcouncil(RESEARCH_BLINK))
                     await self.use_chronoboost(tcouncil)
                     self.research_blink = True
+
+    async def upgrade_resonating_glaives(self):
+        if self.units(TWILIGHTCOUNCIL).ready.amount > 0:
+            if self.can_afford(RESEARCH_ADEPTRESONATINGGLAIVES) and not self.research_resonating_glaives:
+                tcouncil = self.units(TWILIGHTCOUNCIL).ready.first
+                if tcouncil.noqueue:
+                    await self.do(tcouncil(RESEARCH_ADEPTRESONATINGGLAIVES))
+                    await self.use_chronoboost(tcouncil)
+                    self.research_resonating_glaives = True
 
     async def upgrade_thermal_lance(self):
         if self.units(ROBOTICSBAY).ready.amount > 0:
@@ -500,6 +529,8 @@ class HatchiBot(sc2.BotAI):
             attacking_units += self.units(STALKER).idle
         if self.units(ZEALOT).idle.amount > 0:
             attacking_units += self.units(ZEALOT).idle
+        if self.units(ADEPT).idle.amount > 0:
+            attacking_units += self.units(ADEPT).idle
         if self.units(OBSERVER).idle.amount > 0:
             attacking_units += self.units(OBSERVER).idle
         if self.units(IMMORTAL).idle.amount > 0:
@@ -518,6 +549,8 @@ class HatchiBot(sc2.BotAI):
             attacking_units += self.units(STALKER).idle
         if self.units(ZEALOT).idle.amount > 0:
             attacking_units += self.units(ZEALOT).idle
+        if self.units(ADEPT).idle.amount > 0:
+            attacking_units += self.units(ADEPT).idle
         if self.units(OBSERVER).idle.amount > 0:
             attacking_units += self.units(OBSERVER).idle
         if self.units(IMMORTAL).idle.amount > 0:
@@ -536,6 +569,8 @@ class HatchiBot(sc2.BotAI):
             total_units += self.units(STALKER).ready
         if self.units(ZEALOT).amount > 0:
             total_units += self.units(ZEALOT).ready
+        if self.units(ADEPT).amount > 0:
+            total_units += self.units(ADEPT).ready
         if self.units(OBSERVER).amount > 0:
             total_units += self.units(OBSERVER).ready
         if self.units(IMMORTAL).amount > 0:
@@ -554,6 +589,8 @@ class HatchiBot(sc2.BotAI):
             total_units += self.units(STALKER)
         if self.units(ZEALOT).amount > 0:
             total_units += self.units(ZEALOT)
+        if self.units(ADEPT).amount > 0:
+            total_units += self.units(ADEPT)
         if self.units(OBSERVER).amount > 0:
             total_units += self.units(OBSERVER)
         if self.units(IMMORTAL).amount > 0:
