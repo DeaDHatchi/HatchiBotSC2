@@ -8,8 +8,9 @@ import random
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.9"
-    build_date = "7/4/2018"
+    version = "1.1.10"
+    build_date = "7/5/2018"
+    debug = True
 
     # Booleans
     message_sent = False
@@ -21,6 +22,8 @@ class HatchiBot(sc2.BotAI):
     research_gravitic_booster = False
     attacking = False
     defending = False
+    repositioning = False
+    retreating = False
 
     # Hard cap - Max Economy
     max_active_expansions = 5
@@ -53,6 +56,8 @@ class HatchiBot(sc2.BotAI):
         else:
             if iteration % 3 == 0:
                 await self.distribute_workers()
+        if iteration % 250 == 0:
+            await self.chat_send(f"Iteration: {iteration}")
 
         # Build Order Priority
         await self.expand()
@@ -225,6 +230,8 @@ class HatchiBot(sc2.BotAI):
         supply_threashold = 5
         if self.supply_used > 60:
             supply_threashold = 10
+        if self.supply_used > 100:
+            supply_threashold = 15
         if self.supply_left <= supply_threashold and not self.already_pending(PYLON) and self.supply_cap <= 200:
             nexuses = self.units(NEXUS).ready
             if nexuses.exists:
@@ -302,6 +309,11 @@ class HatchiBot(sc2.BotAI):
             if AbilityId.MORPH_WARPGATE in abilities and self.can_afford(AbilityId.MORPH_WARPGATE):
                 await self.do(gateway(MORPH_WARPGATE))
 
+    async def morph_warpgate(self, gateway):
+        abilities = await self.get_available_abilities(gateway)
+        if AbilityId.MORPH_WARPGATE in abilities and self.can_afford(AbilityId.MORPH_WARPGATE):
+            await self.do(gateway(MORPH_WARPGATE))
+
     async def warp_new_units(self, warpgate, warppoint, unit=STALKER, warpId=AbilityId.WARPGATETRAIN_STALKER):
             abilities = await self.get_available_abilities(warpgate)
             if AbilityId.WARPGATETRAIN_ZEALOT in abilities:
@@ -314,6 +326,7 @@ class HatchiBot(sc2.BotAI):
     async def build_zealots(self):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
+                await self.morph_warpgate(gateway)
                 if self.can_train_zealot():
                     await self.do(gateway.train(ZEALOT))
         else:
@@ -327,6 +340,7 @@ class HatchiBot(sc2.BotAI):
     async def build_stalkers(self):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
+                await self.morph_warpgate(gateway)
                 if self.can_train_stalker():
                     await self.do(gateway.train(STALKER))
         else:
@@ -340,6 +354,7 @@ class HatchiBot(sc2.BotAI):
     async def build_sentries(self):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
+                await self.morph_warpgate(gateway)
                 if self.can_train_sentry():
                     await self.do(gateway.train(SENTRY))
         else:
@@ -504,18 +519,43 @@ class HatchiBot(sc2.BotAI):
             total_units += self.units(SENTRY).ready
         return total_units
 
+    def get_all_attacking_units_even_unready(self):
+        total_units = []
+        if self.units(STALKER).amount > 0:
+            total_units += self.units(STALKER)
+        if self.units(ZEALOT).amount > 0:
+            total_units += self.units(ZEALOT)
+        if self.units(OBSERVER).amount > 0:
+            total_units += self.units(OBSERVER)
+        if self.units(IMMORTAL).amount > 0:
+            total_units += self.units(IMMORTAL)
+        if self.units(COLOSSUS).amount > 0:
+            total_units += self.units(COLOSSUS)
+        if self.units(VOIDRAY).amount > 0:
+            total_units += self.units(VOIDRAY)
+        if self.units(SENTRY).amount > 0:
+            total_units += self.units(SENTRY)
+        return total_units
+
     async def should_we_retreat(self):
         return len(self.get_enemy_threats()) > 5 and \
                self.total_army_value(self.get_enemy_threats()) > self.total_army_value(self.total_attacking_units())
 
     async def attack(self):
         if await self.should_we_retreat():
-            self.attacking = False
+            if self.attacking:
+                await self.chat_send("Attacking Flag Off!")
+                self.attacking = False
             await self.retreat()
+
             return
-        if len(self.total_attacking_units()) > 15:
-            self.attacking = True
-            for s in self.get_attacking_units():
+        if len(self.total_attacking_units()) > 20:
+            if not self.attacking:
+                await self.chat_send("Looks like we are Attacking!")
+                self.retreating = False
+                self.defending = False
+                self.attacking = True
+            for s in self.get_all_attacking_units_even_unready():
                 await self.do(s.attack(self.find_target(self.state)))
 
     async def defend(self):
@@ -525,21 +565,33 @@ class HatchiBot(sc2.BotAI):
                 return
             if len(self.get_attacking_units()) > 3:
                 if len(self.enemy_threats(self.known_enemy_units)) > 0:
-                    self.defending = True
-                    for s in self.get_attacking_units():
+                    if not self.defending:
+                        await self.chat_send("Looks like we are Defending!")
+                        self.defending = True
+                    for s in self.get_all_attacking_units_even_unready():
                         await self.do(s.attack(self.find_target(self.state)))
                 else:
-                    self.defending = False
+                    if self.defending:
+                        self.defending = False
+                        await self.chat_send("Defending Flag Off")
 
     async def reposition(self):
         if not self.attacking and not self.defending:
             if len(self.get_attacking_units()) > 0:
-                for s in self.get_attacking_units():
+                if not self.repositioning:
+                    self.repositioning = True
+                    await self.chat_send("Repositioning Army!")
+                for s in self.total_attacking_units():
                     if s.distance_to(self.reposition_location()) > 10:
                         await self.do(s.move(self.reposition_location()))
+        else:
+            self.repositioning = False
 
     async def retreat(self):
-        for s in self.total_attacking_units():
+        if not self.retreating:
+            await self.chat_send("Retreating Army!")
+            self.retreating = True
+        for s in self.get_all_attacking_units_even_unready():
             if s.distance_to(self.reposition_location()) > 40:
                 await self.do(s.move(self.reposition_location()))
 
