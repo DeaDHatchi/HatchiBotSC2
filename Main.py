@@ -8,7 +8,7 @@ import random
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.10"
+    version = "1.1.11"
     build_date = "7/5/2018"
     debug = True
 
@@ -24,6 +24,7 @@ class HatchiBot(sc2.BotAI):
     defending = False
     repositioning = False
     retreating = False
+    regrouping = False
 
     # Hard cap - Max Economy
     max_active_expansions = 5
@@ -32,6 +33,7 @@ class HatchiBot(sc2.BotAI):
     max_probes = 80
     max_zealots = 10
     max_stalkers = 20
+    max_adepts = 10
     max_sentries = 3
     max_observers = 1
     max_immortals = 4
@@ -87,6 +89,7 @@ class HatchiBot(sc2.BotAI):
         await self.build_immortals()
         await self.build_voidrays()
         await self.build_stalkers()
+        await self.build_adepts()
         await self.build_sentries()
         await self.build_zealots()
 
@@ -107,8 +110,11 @@ class HatchiBot(sc2.BotAI):
     def soft_max_zealots(self):
         return self.units(NEXUS).ready.amount * 2
 
-    def soft_max_stalker(self):
+    def soft_max_stalkers(self):
         return self.units(NEXUS).ready.amount * 4
+
+    def soft_max_adepts(self):
+        return self.units(NEXUS).ready.amount * 2
 
     def soft_max_sentries(self):
         return self.units(NEXUS).ready.amount * 1
@@ -139,7 +145,13 @@ class HatchiBot(sc2.BotAI):
         return self.supply_left >= 2 and \
                self.can_afford(STALKER) and \
                self.units(STALKER).amount < self.max_stalkers and \
-               self.units(STALKER).amount < self.soft_max_stalker()
+               self.units(STALKER).amount < self.soft_max_stalkers()
+
+    def can_train_adepts(self):
+        return self.supply_left >= 2 and \
+               self.can_afford(ADEPT) and \
+               self.units(ADEPT).amount < self.max_adepts and \
+               self.units(ADEPT).amount < self.soft_max_adepts()
 
     def can_train_sentry(self):
         return self.supply_left >= 2 and \
@@ -365,6 +377,20 @@ class HatchiBot(sc2.BotAI):
                                               unit=SENTRY,
                                               warpId=AbilityId.WARPGATETRAIN_SENTRY)
 
+    async def build_adepts(self):
+        if len(self.units(WARPGATE).ready) < 1:
+            for gateway in self.units(GATEWAY).ready.noqueue:
+                await self.morph_warpgate(gateway)
+                if self.can_train_adept():
+                    await self.do(gateway.train(ADEPT))
+        else:
+            for warpgate in self.units(WARPGATE).ready:
+                if self.can_train_adept():
+                    await self.warp_new_units(warpgate,
+                                              self.closest_pylon_to_reposition_location(),
+                                              unit=SENTRY,
+                                              warpId=AbilityId.WARPGATETRAIN_ADEPT)
+
     async def build_observers(self):
         for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
             if self.can_train_observers():
@@ -438,6 +464,9 @@ class HatchiBot(sc2.BotAI):
     def reposition_location(self):
         return self.game_info.map_center.towards(self.closest_nexus_to_enemy(), 120 / self.units(NEXUS).amount)
 
+    def regroup_location(self):
+        return self.game_info.map_center.towards(self.enemy_start_locations[0], 120 / self.units(NEXUS).amount)
+
     def enemy_threats(self, units):
         enemies = []
         for unit in units:
@@ -501,7 +530,7 @@ class HatchiBot(sc2.BotAI):
             attacking_units += self.units(SENTRY).idle
         return attacking_units
 
-    def total_attacking_units(self):
+    def ready_attacking_units(self):
         total_units = []
         if self.units(STALKER).amount > 0:
             total_units += self.units(STALKER).ready
@@ -539,7 +568,7 @@ class HatchiBot(sc2.BotAI):
 
     async def should_we_retreat(self):
         return len(self.get_enemy_threats()) > 5 and \
-               self.total_army_value(self.get_enemy_threats()) > self.total_army_value(self.total_attacking_units())
+               self.total_army_value(self.get_enemy_threats()) > self.total_army_value(self.ready_attacking_units())
 
     async def attack(self):
         if await self.should_we_retreat():
@@ -549,7 +578,7 @@ class HatchiBot(sc2.BotAI):
             await self.retreat()
 
             return
-        if len(self.total_attacking_units()) > 20:
+        if len(self.ready_attacking_units()) > 20:
             if not self.attacking:
                 await self.chat_send("Looks like we are Attacking!")
                 self.retreating = False
@@ -581,7 +610,7 @@ class HatchiBot(sc2.BotAI):
                 if not self.repositioning:
                     self.repositioning = True
                     await self.chat_send("Repositioning Army!")
-                for s in self.total_attacking_units():
+                for s in self.ready_attacking_units():
                     if s.distance_to(self.reposition_location()) > 10:
                         await self.do(s.move(self.reposition_location()))
         else:
@@ -594,6 +623,12 @@ class HatchiBot(sc2.BotAI):
         for s in self.get_all_attacking_units_even_unready():
             if s.distance_to(self.reposition_location()) > 40:
                 await self.do(s.move(self.reposition_location()))
+
+    async def regroup(self):
+        if self.regrouping:
+            for s in self.get_all_attacking_units_even_unready():
+                if s.distance_to(self.regroup_location()) > 15:
+                    await self.do(s.move(self.regroup_location()))
 
     def __repr__(self):
         return f'{self.name} - {self.version}'
