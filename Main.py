@@ -9,7 +9,7 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.15"
+    version = "1.1.16"
     last_build_date = "7/7/2018"
 
     # Debug Info
@@ -139,7 +139,7 @@ class HatchiBot(sc2.BotAI):
 
     @property
     def enemy_threats(self):
-        return self.units.enemy.not_structure
+        return self.known_enemy_units.not_structure
 
     @property
     def attacking_units(self):
@@ -632,10 +632,10 @@ class HatchiBot(sc2.BotAI):
         return total
 
     def find_target(self):
-        if len(self.enemy_threats) > 0:
-            return random.choice(self.enemy_threats)
-        if len(self.units.enemy.structure) > 0:
-            return random.choice(self.units.enemy.structure.position)
+        if len(self.known_enemy_units.not_structure) > 0:
+            return random.choice(self.known_enemy_units.not_structure)
+        if len(self.known_enemy_units.structure) > 0:
+            return random.choice(self.known_enemy_units.structure.position)
         else:
             return self.enemy_start_locations[0]
 
