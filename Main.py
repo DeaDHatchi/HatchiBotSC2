@@ -9,12 +9,13 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.14"
+    version = "1.1.15"
     last_build_date = "7/7/2018"
 
     # Debug Info
     debug = True
     time_last = None
+    iterations_per_second = None
 
     # Booleans
     message_sent = False
@@ -171,23 +172,25 @@ class HatchiBot(sc2.BotAI):
         if not self.message_sent:
             await self.message_send()
             self.message_sent = True
-        if iteration == 1:
-            await self.distribute_workers()
-        else:
-            if iteration % 3 == 0:
-                await self.distribute_workers()
 
-        if self.debug:
-            if iteration == 0:
-                self.time_last = time()
-            if iteration % 250 == 0:
+        # Debugging Information
+
+        if iteration == 0:
+            self.time_last = time()
+        if iteration % 250 == 0:
+            if self.debug:
                 await self.chat_send(f"Iteration: {iteration}")
-            if iteration % 1000 == 0 and iteration > 0:
-                current_time = time()
-                calculation = 1000 / (current_time - self.time_last)
-                self.time_last = current_time
-                await self.chat_send('Iterations Per Second: {}'.format(calculation))
+        if iteration % 1000 == 0 and iteration > 0:
+            current_time = time()
+            self.iterations_per_second = 1000 // (current_time - self.time_last)
+            self.time_last = current_time
+            if self.debug:
+                await self.chat_send(f'Iterations Per Second: {self.iterations_per_second}')
 
+        # Worker Distribution Logic
+        if iteration > 0 and self.iterations_per_second is not None:
+            if iteration % self.iterations_per_second == 0:
+                await self.distribute_workers()
 
         # Build Order Priority
         await self.expand()
@@ -631,12 +634,14 @@ class HatchiBot(sc2.BotAI):
     def find_target(self):
         if len(self.enemy_threats) > 0:
             return random.choice(self.enemy_threats)
+        if len(self.units.enemy.structure) > 0:
+            return random.choice(self.units.enemy.structure.position)
         else:
             return self.enemy_start_locations[0]
 
     def should_we_retreat(self):
         return len(self.enemy_threats) > 5 and \
-               self.total_army_value(self.enemy_threats) > self.total_army_value(self.ready_attacking_units) * 1.1
+               self.total_army_value(self.enemy_threats) > self.total_army_value(self.ready_attacking_units)
 
     async def attack(self):
         if self.should_we_retreat():
@@ -694,7 +699,7 @@ class HatchiBot(sc2.BotAI):
 
     async def regroup(self):
         if self.regrouping:
-            for s in self.attacking_units:
+            for s in self.ready_attacking_units:
                 if s.distance_to(self.regroup_location()) > 15:
                     await self.do(s.move(self.regroup_location()))
 
@@ -712,4 +717,5 @@ if __name__ == '__main__':
         Bot(race=Race.Protoss, ai=HatchiBot()),
         Computer(race=random.choice(Races),
                  difficulty=random.choice(Difficulties))
-        ], realtime=True)
+    ], realtime=True)
+
