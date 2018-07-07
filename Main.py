@@ -3,14 +3,18 @@ from sc2 import run_game, maps, Race, Difficulty
 from sc2.player import Bot, Computer
 from sc2.constants import *
 import random
+from time import time
 
 
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.12"
-    build_date = "7/5/2018"
+    version = "1.1.14"
+    last_build_date = "7/7/2018"
+
+    # Debug Info
     debug = True
+    time_last = None
 
     # Booleans
     message_sent = False
@@ -161,7 +165,7 @@ class HatchiBot(sc2.BotAI):
 
     async def message_send(self):
         await self.chat_send(f"{self.name} Online - Version {self.version}")
-        await self.chat_send(f"Last Build Date: {self.build_date}")
+        await self.chat_send(f"Last Build Date: {self.last_build_date}")
 
     async def on_step(self, iteration):
         if not self.message_sent:
@@ -172,8 +176,18 @@ class HatchiBot(sc2.BotAI):
         else:
             if iteration % 3 == 0:
                 await self.distribute_workers()
-        if iteration % 250 == 0:
-            await self.chat_send(f"Iteration: {iteration}")
+
+        if self.debug:
+            if iteration == 0:
+                self.time_last = time()
+            if iteration % 250 == 0:
+                await self.chat_send(f"Iteration: {iteration}")
+            if iteration % 1000 == 0 and iteration > 0:
+                current_time = time()
+                calculation = iteration / (current_time - self.time_last)
+                self.time_last = current_time
+                await self.chat_send('Iterations Per Second: {}'.format(calculation))
+
 
         # Build Order Priority
         await self.expand()
@@ -622,7 +636,7 @@ class HatchiBot(sc2.BotAI):
 
     def should_we_retreat(self):
         return len(self.enemy_threats) > 5 and \
-               self.total_army_value(self.enemy_threats) > self.total_army_value(self.ready_attacking_units()) * 1.1
+               self.total_army_value(self.enemy_threats) > self.total_army_value(self.ready_attacking_units) * 1.1
 
     async def attack(self):
         if self.should_we_retreat():
@@ -632,13 +646,13 @@ class HatchiBot(sc2.BotAI):
             await self.retreat()
 
             return
-        if len(self.ready_attacking_units()) > self.number_of_attacking_units:
+        if len(self.ready_attacking_units) > self.number_of_attacking_units:
             if not self.attacking:
                 await self.chat_send("Looks like we are Attacking!")
                 self.retreating = False
                 self.defending = False
                 self.attacking = True
-            for s in self.attacking_units():
+            for s in self.attacking_units:
                 await self.do(s.attack(self.find_target()))
 
     async def defend(self):
@@ -646,12 +660,12 @@ class HatchiBot(sc2.BotAI):
             if self.should_we_retreat():
                 await self.retreat()
                 return
-            if len(self.idle_attacking_units()) > 3:
-                if len(self.enemy_threats(self.known_enemy_units)) > 0:
+            if len(self.ready_attacking_units) > 3:
+                if len(self.enemy_threats) > 0:
                     if not self.defending:
                         await self.chat_send("Looks like we are Defending!")
                         self.defending = True
-                    for s in self.attacking_units():
+                    for s in self.ready_attacking_units:
                         await self.do(s.attack(self.find_target()))
                 else:
                     if self.defending:
@@ -660,11 +674,11 @@ class HatchiBot(sc2.BotAI):
 
     async def reposition(self):
         if not self.attacking and not self.defending:
-            if len(self.idle_attacking_units()) > 0:
+            if len(self.ready_idle_attacking_units) > 0:
                 if not self.repositioning:
                     self.repositioning = True
                     await self.chat_send("Repositioning Army!")
-                for s in self.ready_idle_attacking_units():
+                for s in self.ready_idle_attacking_units:
                     if s.distance_to(self.reposition_location()) > 10:
                         await self.do(s.move(self.reposition_location()))
         else:
@@ -674,18 +688,18 @@ class HatchiBot(sc2.BotAI):
         if not self.retreating:
             await self.chat_send("Retreating Army!")
             self.retreating = True
-        for s in self.attacking_units():
+        for s in self.attacking_units:
             if s.distance_to(self.reposition_location()) > 40:
                 await self.do(s.move(self.reposition_location()))
 
     async def regroup(self):
         if self.regrouping:
-            for s in self.attacking_units():
+            for s in self.attacking_units:
                 if s.distance_to(self.regroup_location()) > 15:
                     await self.do(s.move(self.regroup_location()))
 
     def __repr__(self):
-        return f'{self.name} - {self.version}'
+        return f'{self.name} - {self.version} - {self.last_build_date}'
 
 
 if __name__ == '__main__':
