@@ -184,7 +184,7 @@ class HatchiBot(sc2.BotAI):
                 await self.chat_send(f"Iteration: {iteration}")
             if iteration % 1000 == 0 and iteration > 0:
                 current_time = time()
-                calculation = iteration / (current_time - self.time_last)
+                calculation = 1000 / (current_time - self.time_last)
                 self.time_last = current_time
                 await self.chat_send('Iterations Per Second: {}'.format(calculation))
 
