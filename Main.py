@@ -9,7 +9,7 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.16"
+    version = "1.1.17"
     last_build_date = "7/7/2018"
 
     # Debug Info
@@ -26,6 +26,14 @@ class HatchiBot(sc2.BotAI):
     research_thermal_lance = False
     research_gravitic_booster = False
     research_resonating_glaives = False
+
+    PROTOSSGROUNDWEAPONSLEVEL1 = False
+    PROTOSSGROUNDWEAPONSLEVEL2 = False
+    PROTOSSGROUNDWEAPONSLEVEL3 = False
+    PROTOSSGROUNDARMORLEVEL1 = False
+    PROTOSSGROUNDARMORLEVEL2 = False
+    PROTOSSGROUNDARMORLEVEL3 = False
+
     attacking = False
     defending = False
     repositioning = False
@@ -205,6 +213,8 @@ class HatchiBot(sc2.BotAI):
         await self.upgrade_gravitic_boosters()
         await self.upgrade_resonating_glaives()
         # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
+        await self.upgrade_ground_weapons()
+        await self.upgrade_ground_armor()
 
         # Building Tech
         await self.build_robotics_bay()
@@ -235,7 +245,7 @@ class HatchiBot(sc2.BotAI):
         return 1 + ((self.units(NEXUS).ready.amount - 1) * 3)
 
     def soft_max_forges(self):
-        return self.units(NEXUS).ready.amount / 4
+        return self.units(NEXUS).ready.amount // 3 + 1
 
     def soft_max_robotics_facility(self):
         return self.units(NEXUS).ready.amount * 1
@@ -607,6 +617,58 @@ class HatchiBot(sc2.BotAI):
                     await self.use_chronoboost(robobay)
                     self.research_gravitic_booster = True
 
+    async def upgrade_ground_weapons(self):
+        if not self.PROTOSSGROUNDWEAPONSLEVEL3:
+            if self.units(NEXUS).ready.amount > 2:
+                forge = self.units(FORGE).ready.random
+                if not self.PROTOSSGROUNDWEAPONSLEVEL1 and forge.noqueue:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL1):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL1))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDWEAPONSLEVEL1 = True
+                if not self.PROTOSSGROUNDWEAPONSLEVEL2 and \
+                        self.PROTOSSGROUNDWEAPONSLEVEL1 and \
+                        forge.noqueue and \
+                        self.units(TWILIGHTCOUNCIL).ready.amount > 0:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL2):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL2))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDWEAPONSLEVEL2 = True
+                if not self.PROTOSSGROUNDWEAPONSLEVEL3 and \
+                        self.PROTOSSGROUNDWEAPONSLEVEL2 and \
+                        forge.noqueue and \
+                        self.units(TWILIGHTCOUNCIL).ready.amount > 0:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL3):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDWEAPONSLEVEL3))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDWEAPONSLEVEL3 = True
+
+    async def upgrade_ground_armor(self):
+        if not self.PROTOSSGROUNDARMORLEVEL1:
+            if self.units(NEXUS).ready.amount > 2:
+                forge = self.units(FORGE).ready.random
+                if not self.PROTOSSGROUNDARMORLEVEL1 and forge.noqueue:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL1):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL1))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDARMORLEVEL1 = True
+                if not self.PROTOSSGROUNDARMORLEVEL2 and \
+                        self.PROTOSSGROUNDARMORLEVEL1 and \
+                        forge.noqueue and \
+                        self.units(TWILIGHTCOUNCIL).ready.amount > 0:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL2):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL2))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDARMORLEVEL2 = True
+                if not self.PROTOSSGROUNDARMORLEVEL3 and \
+                        self.PROTOSSGROUNDARMORLEVEL2 and \
+                        forge.noqueue and \
+                        self.units(TWILIGHTCOUNCIL).ready.amount > 0:
+                    if self.can_afford(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL3):
+                        await self.do(forge(FORGERESEARCH_PROTOSSGROUNDARMORLEVEL3))
+                        await self.use_chronoboost(forge)
+                        self.PROTOSSGROUNDARMORLEVEL3 = True
+
     async def use_chronoboost(self, building):
         for nexus in self.units(NEXUS).ready:
             if nexus.energy > 50:
@@ -635,7 +697,7 @@ class HatchiBot(sc2.BotAI):
         if len(self.known_enemy_units.not_structure) > 0:
             return random.choice(self.known_enemy_units.not_structure)
         if len(self.known_enemy_units.structure) > 0:
-            return random.choice(self.known_enemy_units.structure.position)
+            return random.choice(self.known_enemy_units.structure).position
         else:
             return self.enemy_start_locations[0]
 
