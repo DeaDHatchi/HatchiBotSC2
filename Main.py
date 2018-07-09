@@ -45,14 +45,15 @@ class HatchiBot(sc2.BotAI):
 
     # Hard cap - Max Units
     max_probes = 80
-    max_zealots = 10
-    max_stalkers = 20
+    max_zealots = 15
+    max_stalkers = 15
     max_adepts = 10
     max_sentries = 3
     max_observers = 1
     max_immortals = 4
     max_colossus = 4
     max_voidrays = 4
+    max_carriers = 12
 
     # Hard cap - Max Buildings
     max_gateways = 10
@@ -146,6 +147,10 @@ class HatchiBot(sc2.BotAI):
         return self.units(VOIDRAY)
 
     @property
+    def carriers(self):
+        return self.units(CARRIER)
+
+    @property
     def enemy_threats(self):
         return self.known_enemy_units.not_structure
 
@@ -158,7 +163,8 @@ class HatchiBot(sc2.BotAI):
                self.observers | \
                self.immortals | \
                self.colossus | \
-               self.voidrays
+               self.voidrays | \
+               self.carriers
 
     @property
     def idle_attacking_units(self):
@@ -196,9 +202,7 @@ class HatchiBot(sc2.BotAI):
                 await self.chat_send(f'Iterations Per Second: {self.iterations_per_second}')
 
         # Worker Distribution Logic
-        if iteration > 0 and self.iterations_per_second is not None:
-            if iteration % self.iterations_per_second == 0:
-                await self.distribute_workers()
+        await self.distribute_workers()
 
         # Build Order Priority
         await self.expand()
@@ -217,6 +221,7 @@ class HatchiBot(sc2.BotAI):
         await self.upgrade_ground_armor()
 
         # Building Tech
+        await self.build_fleet_beacon()
         await self.build_robotics_bay()
         await self.build_robotics_facility()
         await self.build_twilight_council()
@@ -228,6 +233,7 @@ class HatchiBot(sc2.BotAI):
 
         # Build Units
         await self.build_observers()
+        await self.build_carriers()
         await self.build_colossus()
         await self.build_immortals()
         await self.build_voidrays()
@@ -242,7 +248,7 @@ class HatchiBot(sc2.BotAI):
         await self.reposition()
 
     def soft_max_gateways(self):
-        return 1 + ((self.units(NEXUS).ready.amount - 1) * 3)
+        return 1 + ((self.units(NEXUS).ready.amount - 1) * 2)
 
     def soft_max_forges(self):
         return self.units(NEXUS).ready.amount // 3 + 1
@@ -251,13 +257,13 @@ class HatchiBot(sc2.BotAI):
         return self.units(NEXUS).ready.amount * 1
 
     def soft_max_probes(self):
-        return self.units(NEXUS).ready.amount * 22
+        return self.units(NEXUS).amount * 22
 
     def soft_max_zealots(self):
-        return self.units(NEXUS).ready.amount * 2
+        return self.units(NEXUS).ready.amount * 3
 
     def soft_max_stalkers(self):
-        return self.units(NEXUS).ready.amount * 4
+        return self.units(NEXUS).ready.amount * 3
 
     def soft_max_adepts(self):
         return self.units(NEXUS).ready.amount * 2
@@ -274,88 +280,97 @@ class HatchiBot(sc2.BotAI):
     def soft_max_voidrays(self):
         return self.units(NEXUS).ready.amount * 1
 
-    def can_train_probe(self):
+    def soft_max_carriers(self):
+        return self.units(NEXUS).ready.amount * 3
+
+    async def can_train_probe(self):
         return self.supply_left >= 1 and \
                self.can_afford(PROBE) and \
                self.units(PROBE).amount < self.max_probes and \
                self.units(PROBE).amount < self.soft_max_probes()
 
-    def can_train_zealot(self):
+    async def can_train_zealot(self):
         return self.supply_left >= 2 and \
                self.can_afford(ZEALOT) and \
                self.units(ZEALOT).amount < self.max_zealots and \
                self.units(ZEALOT).amount < self.soft_max_zealots() and \
                self.units(STALKER).ready.amount >= 2
 
-    def can_train_stalker(self):
+    async def can_train_stalker(self):
         return self.supply_left >= 2 and \
                self.can_afford(STALKER) and \
                self.units(STALKER).amount < self.max_stalkers and \
                self.units(STALKER).amount < self.soft_max_stalkers()
 
-    def can_train_adepts(self):
+    async def can_train_adepts(self):
         return self.supply_left >= 2 and \
                self.can_afford(ADEPT) and \
                self.units(ADEPT).amount < self.max_adepts and \
                self.units(ADEPT).amount < self.soft_max_adepts()
 
-    def can_train_sentry(self):
+    async def can_train_sentry(self):
         return self.supply_left >= 2 and \
                self.can_afford(SENTRY) and \
                self.units(SENTRY).amount < self.max_sentries and \
                self.units(SENTRY).amount < self.soft_max_sentries() and \
                self.units(STALKER).amount >= 2
 
-    def can_train_observers(self):
+    async def can_train_observers(self):
         return self.supply_left >= 1 and \
                self.can_afford(OBSERVER) and \
                self.units(OBSERVER).amount < self.max_observers
 
-    def can_train_immortal(self):
+    async def can_train_immortal(self):
         return self.supply_left >= 4 and \
                self.can_afford(IMMORTAL) and \
                self.units(IMMORTAL).amount < self.max_immortals and \
                self.units(IMMORTAL).amount < self.soft_max_immortals()
 
-    def can_train_colossus(self):
+    async def can_train_colossus(self):
         return self.supply_left >= 6 and \
                self.can_afford(COLOSSUS) and \
                self.units(COLOSSUS).amount < self.max_colossus and \
                self.units(COLOSSUS).amount < self.soft_max_colossus()
 
-    def can_train_voidrays(self):
+    async def can_train_voidrays(self):
         return self.supply_left >= 4 and \
                self.can_afford(VOIDRAY) and \
                self.units(VOIDRAY).amount < self.max_voidrays and \
                self.units(VOIDRAY).amount < self.soft_max_voidrays()
 
-    def can_build_nexus(self):
+    async def can_train_carriers(self):
+        return self.supply_left >= 6 and \
+               self.can_afford(CARRIER) and \
+               self.units(CARRIER).amount < self.max_carriers and \
+               self.units(CARRIER).amount < self.soft_max_carriers()
+
+    async def can_build_nexus(self):
         return self.can_afford(NEXUS) and \
                self.units(PROBE).ready.amount / 15 > self.units(NEXUS).ready.amount and \
                self.units(NEXUS).amount < self.max_active_expansions and not \
                self.already_pending(NEXUS)
 
-    def can_build_assimilator(self):
+    async def can_build_assimilator(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).amount > 0 and \
                self.can_afford(ASSIMILATOR) and \
                (self.units(ASSIMILATOR).amount < self.units(PROBE).amount / 11 or self.units(PROBE).amount > 45) and not \
                self.already_pending(ASSIMILATOR)
 
-    def can_build_gateway(self):
+    async def can_build_gateway(self):
         buildings = self.units(GATEWAY).amount + self.units(WARPGATE).amount
         return buildings < self.max_gateways and \
                buildings < self.soft_max_gateways() and \
                self.can_afford(GATEWAY)
 
-    def can_build_forge(self):
+    async def can_build_forge(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(FORGE).amount < self.max_forges and \
                self.units(FORGE).amount < self.soft_max_forges() and \
                self.units(CYBERNETICSCORE).amount > 0 and \
                self.can_afford(FORGE)
 
-    def can_build_cyberneticscore(self):
+    async def can_build_cyberneticscore(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(GATEWAY).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).amount < 1 and \
@@ -363,14 +378,14 @@ class HatchiBot(sc2.BotAI):
                self.already_pending(CYBERNETICSCORE) and not \
                self.fast_expand
 
-    def can_build_twilight_council(self):
+    async def can_build_twilight_council(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).ready.amount > 0 and \
                self.units(TWILIGHTCOUNCIL).ready.amount < 1 and \
                self.can_afford(TWILIGHTCOUNCIL) and not \
                self.already_pending(TWILIGHTCOUNCIL)
 
-    def can_build_stargate(self):
+    async def can_build_stargate(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).ready.amount > 0 and \
                self.units(STARGATE).ready.amount < 1 and \
@@ -378,7 +393,7 @@ class HatchiBot(sc2.BotAI):
                self.can_afford(STARGATE) and not \
                self.already_pending(STARGATE)
 
-    def can_build_robotics_facility(self):
+    async def can_build_robotics_facility(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).ready.amount > 0 and \
                self.units(ROBOTICSFACILITY).ready.amount < self.units(NEXUS).ready.amount and \
@@ -386,9 +401,24 @@ class HatchiBot(sc2.BotAI):
                self.can_afford(ROBOTICSFACILITY) and not \
                self.already_pending(ROBOTICSFACILITY)
 
+    async def can_build_fleet_beacon(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(STARGATE).ready.amount > 0 and \
+               self.units(FLEETBEACON).amount < 1 and \
+               self.units(NEXUS).amount >= 3 and not \
+               self.already_pending(FLEETBEACON)
+
+    async def can_build_robotics_bay(self):
+        return self.units(PYLON).ready.amount > 0 and \
+               self.units(NEXUS).ready.amount >= 3 and \
+               self.units(ROBOTICSFACILITY).ready.amount > 0 and \
+               self.units(ROBOTICSBAY).amount < 1 and \
+               self.can_afford(ROBOTICSBAY) and not \
+               self.already_pending(ROBOTICSBAY)
+
     async def build_worker(self):
         for nexus in self.units(NEXUS).ready.noqueue:
-            if self.can_train_probe():
+            if await self.can_train_probe():
                 await self.do(nexus.train(PROBE))
                 await self.use_chronoboost(nexus)
 
@@ -402,10 +432,10 @@ class HatchiBot(sc2.BotAI):
             nexuses = self.units(NEXUS).ready
             if nexuses.exists:
                 if self.can_afford(PYLON):
-                    await self.build(PYLON, near=nexuses.random.position.towards(self.game_info.map_center, 5))
+                    await self.build(PYLON, near=nexuses.random.position.towards(self.game_info.map_center, 8))
 
     async def expand(self):
-        if self.can_build_nexus():
+        if await self.can_build_nexus():
             await self.expand_now()
             if self.fast_expand:
                 self.fast_expand = False
@@ -414,7 +444,7 @@ class HatchiBot(sc2.BotAI):
         for nexus in self.units(NEXUS).ready:
             vaspenes = self.state.vespene_geyser.closer_than(10.0, nexus)
             for vaspene in vaspenes:
-                if self.can_build_assimilator():
+                if await self.can_build_assimilator():
                     worker = self.select_build_worker(vaspene.position)
                     if worker is None:
                         break
@@ -423,48 +453,49 @@ class HatchiBot(sc2.BotAI):
 
     async def build_gateway(self):
         if self.units(PYLON).ready.amount > 0:
-            if self.can_build_gateway():
+            if await self.can_build_gateway():
                 pylon = self.units(PYLON).ready.random
                 if self.units(CYBERNETICSCORE).amount > 0:
-                    await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
+                    await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 8))
                 else:
                     if self.units(GATEWAY).amount < 1:
-                        await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 5))
+                        await self.build(GATEWAY, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_forge(self):
-        if self.can_build_forge():
+        if await self.can_build_forge():
             pylon = self.units(PYLON).ready.random
-            await self.build(FORGE, near=pylon.position.towards(self.game_info.map_center, 5))
+            await self.build(FORGE, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_cybernetics_core(self):
-        if self.can_build_cyberneticscore():
+        if await self.can_build_cyberneticscore():
             pylon = self.units(PYLON).ready.random
-            await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 5))
+            await self.build(CYBERNETICSCORE, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_twilight_council(self):
-        if self.can_build_twilight_council():
+        if await self.can_build_twilight_council():
             pylon = self.units(PYLON).ready.random
-            await self.build(TWILIGHTCOUNCIL, near=pylon.position.towards(self.game_info.map_center, 5))
+            await self.build(TWILIGHTCOUNCIL, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_stargate(self):
-        if self.can_build_stargate():
+        if await self.can_build_stargate():
             pylon = self.units(PYLON).ready.random
-            await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center, 5))
+            await self.build(STARGATE, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_robotics_facility(self):
-        if self.units(PYLON).ready.amount > 0 and self.units(CYBERNETICSCORE).ready.amount > 0:
-            if self.units(ROBOTICSFACILITY).ready.amount < self.units(NEXUS).ready.amount and not self.already_pending(ROBOTICSFACILITY):
-                if self.units(ROBOTICSFACILITY).ready.amount < self.max_robotics_facility:
-                    if self.can_afford(ROBOTICSFACILITY):
-                        pylon = self.units(PYLON).ready.random
-                        await self.build(ROBOTICSFACILITY, near=pylon.position.towards(self.game_info.map_center, 5))
+        if await self.can_build_robotics_facility():
+            pylon = self.units(PYLON).ready.random
+            await self.build(ROBOTICSFACILITY, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def build_robotics_bay(self):
-        if self.units(PYLON).ready.amount > 0 and self.units(ROBOTICSFACILITY).ready.amount > 0:
-            if self.units(ROBOTICSBAY).ready.amount < 1 and not self.already_pending(ROBOTICSBAY):
-                if self.can_afford(ROBOTICSBAY):
-                    pylon = self.units(PYLON).ready.random
-                    await self.build(ROBOTICSBAY, near=pylon.position.towards(self.game_info.map_center, 5))
+        if await self.can_build_robotics_bay():
+            pylon = self.units(PYLON).ready.random
+            await self.build(ROBOTICSBAY, near=pylon.position.towards(self.game_info.map_center, 8))
+
+    async def build_fleet_beacon(self):
+        if await self.can_build_fleet_beacon():
+            if self.can_afford(FLEETBEACON):
+                pylon = self.units(PYLON).ready.random
+                await self.build(FLEETBEACON, near=pylon.position.towards(self.game_info.map_center, 8))
 
     async def upgrade_warpgate(self):
         if self.units(CYBERNETICSCORE).ready.amount > 0:
@@ -498,11 +529,11 @@ class HatchiBot(sc2.BotAI):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
                 await self.morph_warpgate(gateway)
-                if self.can_train_zealot():
+                if await self.can_train_zealot():
                     await self.do(gateway.train(ZEALOT))
         else:
             for warpgate in self.units(WARPGATE).ready:
-                if self.can_train_zealot():
+                if await self.can_train_zealot():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=ZEALOT,
@@ -512,11 +543,11 @@ class HatchiBot(sc2.BotAI):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
                 await self.morph_warpgate(gateway)
-                if self.can_train_stalker():
+                if await self.can_train_stalker():
                     await self.do(gateway.train(STALKER))
         else:
             for warpgate in self.units(WARPGATE).ready:
-                if self.can_train_stalker():
+                if await self.can_train_stalker():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=STALKER,
@@ -526,11 +557,11 @@ class HatchiBot(sc2.BotAI):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
                 await self.morph_warpgate(gateway)
-                if self.can_train_sentry():
+                if await self.can_train_sentry():
                     await self.do(gateway.train(SENTRY))
         else:
             for warpgate in self.units(WARPGATE).ready:
-                if self.can_train_sentry():
+                if await self.can_train_sentry():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=SENTRY,
@@ -540,11 +571,11 @@ class HatchiBot(sc2.BotAI):
         if len(self.units(WARPGATE).ready) < 1:
             for gateway in self.units(GATEWAY).ready.noqueue:
                 await self.morph_warpgate(gateway)
-                if self.can_train_adepts():
+                if await self.can_train_adepts():
                     await self.do(gateway.train(ADEPT))
         else:
             for warpgate in self.units(WARPGATE).ready:
-                if self.can_train_adepts():
+                if await self.can_train_adepts():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
                                               unit=SENTRY,
@@ -552,25 +583,31 @@ class HatchiBot(sc2.BotAI):
 
     async def build_observers(self):
         for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
-            if self.can_train_observers():
+            if await self.can_train_observers():
                 await self.do(robo.train(OBSERVER))
 
     async def build_immortals(self):
         for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
-            if self.can_train_immortal():
+            if await self.can_train_immortal():
                 await self.do(robo.train(IMMORTAL))
 
     async def build_colossus(self):
-        if len(self.units(ROBOTICSBAY).ready) > 0:
+        if self.units(ROBOTICSBAY).ready.amount > 0:
             for robo in self.units(ROBOTICSFACILITY).ready.noqueue:
-                if self.can_train_colossus():
+                if await self.can_train_colossus():
                     await self.do(robo.train(COLOSSUS))
 
     async def build_voidrays(self):
-        if len(self.units(STARGATE).ready) > 0:
+        if self.units(STARGATE).ready.amount > 0:
             for sg in self.units(STARGATE).ready.noqueue:
-                if self.can_train_voidrays():
+                if await self.can_train_voidrays():
                     await self.do(sg.train(VOIDRAY))
+
+    async def build_carriers(self):
+        if self.units(STARGATE).ready.amount > 0 and self.units(FLEETBEACON).ready.amount > 0:
+            for sg in self.units(STARGATE).ready.noqueue:
+                if await self.can_train_carriers():
+                    await self.do(sg.train(CARRIER))
 
     async def upgrade_zealot_charge(self):
         if self.units(TWILIGHTCOUNCIL).ready.amount > 0:
@@ -780,4 +817,3 @@ if __name__ == '__main__':
         Computer(race=random.choice(Races),
                  difficulty=random.choice(Difficulties))
     ], realtime=True)
-
