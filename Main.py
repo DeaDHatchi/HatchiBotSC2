@@ -9,8 +9,8 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.17"
-    last_build_date = "7/7/2018"
+    version = "1.1.18"
+    last_build_date = "7/8/2018"
 
     # Debug Info
     debug = True
@@ -26,6 +26,7 @@ class HatchiBot(sc2.BotAI):
     research_thermal_lance = False
     research_gravitic_booster = False
     research_resonating_glaives = False
+    research_graviton_catapult = False
 
     PROTOSSGROUNDWEAPONSLEVEL1 = False
     PROTOSSGROUNDWEAPONSLEVEL2 = False
@@ -56,10 +57,10 @@ class HatchiBot(sc2.BotAI):
     max_carriers = 12
 
     # Hard cap - Max Buildings
-    max_gateways = 10
+    max_gateways = 7
     max_forges = 2
     max_robotics_facility = 2
-    max_star_gates = 1
+    max_stargates = 3
 
     # Units
     number_of_attacking_units = 25
@@ -256,6 +257,9 @@ class HatchiBot(sc2.BotAI):
     def soft_max_robotics_facility(self):
         return self.units(NEXUS).ready.amount * 1
 
+    def soft_max_stargates(self):
+        return self.units(NEXUS).ready.amount - 1
+
     def soft_max_probes(self):
         return self.units(NEXUS).amount * 22
 
@@ -388,7 +392,8 @@ class HatchiBot(sc2.BotAI):
     async def can_build_stargate(self):
         return self.units(PYLON).ready.amount > 0 and \
                self.units(CYBERNETICSCORE).ready.amount > 0 and \
-               self.units(STARGATE).ready.amount < 1 and \
+               self.units(STARGATE).amount < self.max_stargates and \
+               self.units(STARGATE).amount < self.soft_max_stargates() and \
                self.units(ROBOTICSFACILITY).ready.amount > 0 and \
                self.can_afford(STARGATE) and not \
                self.already_pending(STARGATE)
@@ -560,12 +565,12 @@ class HatchiBot(sc2.BotAI):
                 if await self.can_train_sentry():
                     await self.do(gateway.train(SENTRY))
         else:
-            for warpgate in self.units(WARPGATE).ready:
-                if await self.can_train_sentry():
-                    await self.warp_new_units(warpgate,
-                                              self.closest_pylon_to_reposition_location(),
-                                              unit=SENTRY,
-                                              warpId=AbilityId.WARPGATETRAIN_SENTRY)
+            warpgate = self.units(WARPGATE).ready.random
+            if await self.can_train_sentry():
+                await self.warp_new_units(warpgate,
+                                          self.closest_pylon_to_reposition_location(),
+                                          unit=SENTRY,
+                                          warpId=AbilityId.WARPGATETRAIN_SENTRY)
 
     async def build_adepts(self):
         if len(self.units(WARPGATE).ready) < 1:
@@ -578,7 +583,7 @@ class HatchiBot(sc2.BotAI):
                 if await self.can_train_adepts():
                     await self.warp_new_units(warpgate,
                                               self.closest_pylon_to_reposition_location(),
-                                              unit=SENTRY,
+                                              unit=ADEPT,
                                               warpId=AbilityId.TRAINWARP_ADEPT)
 
     async def build_observers(self):
@@ -608,6 +613,7 @@ class HatchiBot(sc2.BotAI):
             for sg in self.units(STARGATE).ready.noqueue:
                 if await self.can_train_carriers():
                     await self.do(sg.train(CARRIER))
+                    await self.use_chronoboost(sg)
 
     async def upgrade_zealot_charge(self):
         if self.units(TWILIGHTCOUNCIL).ready.amount > 0:
@@ -653,6 +659,15 @@ class HatchiBot(sc2.BotAI):
                     await self.do(robobay(RESEARCH_GRAVITICBOOSTER))
                     await self.use_chronoboost(robobay)
                     self.research_gravitic_booster = True
+
+    async def upgrade_graviton_catapult(self):
+        if self.units(FLEETBEACON).ready.amount > 0:
+            if self.can_afford(RESEARCH_INTERCEPTORGRAVITONCATAPULT) and not self.research_graviton_catapult:
+                fleetbeacon = self.units(FLEETBEACON).ready.first
+                if fleetbeacon.noqueue:
+                    await self.do(fleetbeacon(RESEARCH_INTERCEPTORGRAVITONCATAPULT))
+                    await self.use_chronoboost(fleetbeacon)
+                    self.research_graviton_catapult = True
 
     async def upgrade_ground_weapons(self):
         if not self.PROTOSSGROUNDWEAPONSLEVEL3:
@@ -784,7 +799,7 @@ class HatchiBot(sc2.BotAI):
                     await self.chat_send("Repositioning Army!")
                 for s in self.ready_idle_attacking_units:
                     if s.distance_to(self.reposition_location()) > 10:
-                        await self.do(s.move(self.reposition_location()))
+                        await self.do(s.attack(self.reposition_location()))
         else:
             self.repositioning = False
 
