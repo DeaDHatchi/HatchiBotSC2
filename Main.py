@@ -9,7 +9,7 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.18"
+    version = "1.1.19"
     last_build_date = "7/8/2018"
 
     # Debug Info
@@ -58,7 +58,7 @@ class HatchiBot(sc2.BotAI):
 
     # Hard cap - Max Buildings
     max_gateways = 7
-    max_forges = 2
+    max_forges = 1
     max_robotics_facility = 2
     max_stargates = 3
 
@@ -213,6 +213,7 @@ class HatchiBot(sc2.BotAI):
         # Upgrades
         await self.upgrade_gateways()
         await self.upgrade_warpgate()
+        await self.upgrade_graviton_catapult()
         await self.upgrade_thermal_lance()
         await self.upgrade_zealot_charge()
         await self.upgrade_gravitic_boosters()
