@@ -9,7 +9,7 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.19"
+    version = "1.1.20"
     last_build_date = "7/8/2018"
 
     # Debug Info
@@ -761,18 +761,19 @@ class HatchiBot(sc2.BotAI):
     async def attack(self):
         if self.should_we_retreat():
             if self.attacking:
-                await self.chat_send("Attacking Flag Off!")
+                if self.debug:
+                    await self.chat_send("Attacking Flag Off!")
                 self.attacking = False
             await self.retreat()
-
             return
-        if len(self.ready_attacking_units) > self.number_of_attacking_units:
+        if self.ready_attacking_units.amount > self.number_of_attacking_units:
             if not self.attacking:
-                await self.chat_send("Looks like we are Attacking!")
+                if self.debug:
+                    await self.chat_send("Looks like we are Attacking!")
                 self.retreating = False
                 self.defending = False
                 self.attacking = True
-            for s in self.attacking_units:
+            for s in self.ready_idle_attacking_units:
                 await self.do(s.attack(self.find_target()))
 
     async def defend(self):
@@ -780,25 +781,29 @@ class HatchiBot(sc2.BotAI):
             if self.should_we_retreat():
                 await self.retreat()
                 return
-            if len(self.ready_attacking_units) > 3:
-                if len(self.enemy_threats) > 0:
+            if self.ready_attacking_units.amount > 3:
+                if self.enemy_threats.amount > 0:
                     if not self.defending:
-                        await self.chat_send("Looks like we are Defending!")
+                        if self.debug:
+                            await self.chat_send("Looks like we are Defending!")
                         self.defending = True
                     for s in self.ready_attacking_units:
                         await self.do(s.attack(self.find_target()))
                 else:
                     if self.defending:
                         self.defending = False
-                        await self.chat_send("Defending Flag Off")
+                        if self.debug:
+                            await self.chat_send("Defending Flag Off")
 
     async def reposition(self):
         if not self.attacking and not self.defending:
-            if len(self.ready_idle_attacking_units) > 0:
+            group = self.ready_idle_attacking_units.filter(lambda unit: unit.distance_to(self.reposition_location()) > 10)
+            if group.amount > 0:
                 if not self.repositioning:
+                    if self.debug:
+                        await self.chat_send("Repositioning Army!")
                     self.repositioning = True
-                    await self.chat_send("Repositioning Army!")
-                for s in self.ready_idle_attacking_units:
+                for s in group:
                     if s.distance_to(self.reposition_location()) > 10:
                         await self.do(s.attack(self.reposition_location()))
         else:
@@ -806,11 +811,12 @@ class HatchiBot(sc2.BotAI):
 
     async def retreat(self):
         if not self.retreating:
-            await self.chat_send("Retreating Army!")
+            if self.debug:
+                await self.chat_send("Retreating Army!")
             self.retreating = True
-        for s in self.attacking_units:
-            if s.distance_to(self.reposition_location()) > 40:
-                await self.do(s.move(self.reposition_location()))
+        group = self.attacking_units.filter(lambda unit: unit.distance_to(self.reposition_location()) > 40)
+        for s in group:
+            await self.do(s.move(self.reposition_location()))
 
     async def regroup(self):
         if self.regrouping:
