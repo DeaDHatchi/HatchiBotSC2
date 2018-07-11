@@ -9,8 +9,8 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.20"
-    last_build_date = "7/8/2018"
+    version = "1.1.21"
+    last_build_date = "7/11/2018"
 
     # Debug Info
     debug = True
@@ -57,10 +57,10 @@ class HatchiBot(sc2.BotAI):
     max_carriers = 12
 
     # Hard cap - Max Buildings
-    max_gateways = 7
+    max_gateways = 5
     max_forges = 1
     max_robotics_facility = 2
-    max_stargates = 3
+    max_stargates = 4
 
     # Units
     number_of_attacking_units = 25
@@ -156,6 +156,17 @@ class HatchiBot(sc2.BotAI):
         return self.known_enemy_units.not_structure
 
     @property
+    def near_by_enemy_threats(self):
+        total = None
+        for nexus in self.nexuses:
+            group = self.enemy_threats.filter(lambda unit: self.enemy_threats.closer_than(20, nexus))
+            if not total:
+                total = group
+            else:
+                total += group
+        return total
+
+    @property
     def attacking_units(self):
         return self.zealots | \
                self.stalkers | \
@@ -208,41 +219,43 @@ class HatchiBot(sc2.BotAI):
         # Build Order Priority
         await self.expand()
         await self.build_pylon()
+        await self.build_assimilator()
         await self.build_worker()
 
         # Upgrades
         await self.upgrade_gateways()
         await self.upgrade_warpgate()
-        await self.upgrade_graviton_catapult()
-        await self.upgrade_thermal_lance()
-        await self.upgrade_zealot_charge()
-        await self.upgrade_gravitic_boosters()
-        await self.upgrade_resonating_glaives()
-        # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
-        await self.upgrade_ground_weapons()
-        await self.upgrade_ground_armor()
+
+        if self.minerals > 100:
+            await self.upgrade_graviton_catapult()
+            await self.upgrade_thermal_lance()
+            await self.upgrade_zealot_charge()
+            await self.upgrade_gravitic_boosters()
+            await self.upgrade_resonating_glaives()
+            # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
+            await self.upgrade_ground_weapons()
+            await self.upgrade_ground_armor()
 
         # Building Tech
-        await self.build_fleet_beacon()
-        await self.build_robotics_bay()
-        await self.build_robotics_facility()
-        await self.build_twilight_council()
-        await self.build_stargate()
-        await self.build_forge()
-        await self.build_cybernetics_core()
-        await self.build_gateway()
-        await self.build_assimilator()
+            await self.build_fleet_beacon()
+            await self.build_robotics_bay()
+            await self.build_robotics_facility()
+            await self.build_twilight_council()
+            await self.build_stargate()
+            await self.build_forge()
+            await self.build_cybernetics_core()
+            await self.build_gateway()
 
         # Build Units
-        await self.build_observers()
-        await self.build_carriers()
-        await self.build_colossus()
-        await self.build_immortals()
-        await self.build_voidrays()
-        await self.build_stalkers()
-        await self.build_adepts()
-        await self.build_sentries()
-        await self.build_zealots()
+            await self.build_observers()
+            await self.build_carriers()
+            await self.build_colossus()
+            await self.build_immortals()
+            await self.build_voidrays()
+            await self.build_stalkers()
+            await self.build_adepts()
+            await self.build_sentries()
+            await self.build_zealots()
 
         # Attack
         await self.defend()
@@ -746,13 +759,16 @@ class HatchiBot(sc2.BotAI):
             total += unit._type_data.cost.minerals + (unit._type_data.cost.vespene * 1.20)
         return total
 
-    def find_target(self):
-        if len(self.known_enemy_units.not_structure) > 0:
-            return random.choice(self.known_enemy_units.not_structure)
-        if len(self.known_enemy_units.structure) > 0:
-            return random.choice(self.known_enemy_units.structure).position
+    def find_target(self, targets=None):
+        if targets and targets.amount > 0:
+            return random.choice(targets)
         else:
-            return self.enemy_start_locations[0]
+            if len(self.known_enemy_units.not_structure) > 0:
+                return random.choice(self.known_enemy_units.not_structure)
+            if len(self.known_enemy_units.structure) > 0:
+                return random.choice(self.known_enemy_units.structure).position
+            else:
+                return self.enemy_start_locations[0]
 
     def should_we_retreat(self):
         return len(self.enemy_threats) > 5 and \
@@ -782,13 +798,13 @@ class HatchiBot(sc2.BotAI):
                 await self.retreat()
                 return
             if self.ready_attacking_units.amount > 3:
-                if self.enemy_threats.amount > 0:
+                if self.near_by_enemy_threats.amount > 0:
                     if not self.defending:
                         if self.debug:
                             await self.chat_send("Looks like we are Defending!")
                         self.defending = True
                     for s in self.ready_attacking_units:
-                        await self.do(s.attack(self.find_target()))
+                        await self.do(s.attack(self.find_target(targets=self.near_by_enemy_threats)))
                 else:
                     if self.defending:
                         self.defending = False
@@ -818,11 +834,10 @@ class HatchiBot(sc2.BotAI):
         for s in group:
             await self.do(s.move(self.reposition_location()))
 
-    async def regroup(self):
-        if self.regrouping:
-            for s in self.ready_attacking_units:
-                if s.distance_to(self.regroup_location()) > 15:
-                    await self.do(s.move(self.regroup_location()))
+    async def regroup(self, units, location):
+        group = units.filter(lambda unit: unit.distance_to(location) > 5)
+        for s in group:
+            await self.do(s.move(location))
 
     def __repr__(self):
         return f'{self.name} - {self.version} - {self.last_build_date}'
