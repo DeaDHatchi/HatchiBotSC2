@@ -9,8 +9,8 @@ from time import time
 class HatchiBot(sc2.BotAI):
 
     name = 'HatchiBot'
-    version = "1.1.21"
-    last_build_date = "7/11/2018"
+    version = "1.2.2"
+    last_build_date = "7/13/2018"
 
     # Debug Info
     debug = True
@@ -35,11 +35,31 @@ class HatchiBot(sc2.BotAI):
     PROTOSSGROUNDARMORLEVEL2 = False
     PROTOSSGROUNDARMORLEVEL3 = False
 
+    PROTOSSAIRWEAPONSLEVEL1 = False
+    PROTOSSAIRWEAPONSLEVEL2 = False
+    PROTOSSAIRWEAPONSLEVEL3 = False
+    PROTOSSAIRARMORLEVEL1 = False
+    PROTOSSAIRARMORLEVEL2 = False
+    PROTOSSAIRARMORLEVEL3 = False
+
+    """
+    CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL1 = 1562
+    CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL2 = 1563
+    CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL3 = 1564
+    CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL1 = 1565
+    CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL2 = 1566
+    CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL3 = 1567
+    """
+
     attacking = False
     defending = False
     repositioning = False
     retreating = False
     regrouping = False
+
+    # Strategy
+    sky_protoss_switch = False
+    priority_building = None
 
     # Hard cap - Max Economy
     max_active_expansions = 7
@@ -59,6 +79,7 @@ class HatchiBot(sc2.BotAI):
     # Hard cap - Max Buildings
     max_gateways = 5
     max_forges = 1
+    max_cyberneticscore = 1
     max_robotics_facility = 2
     max_stargates = 4
 
@@ -152,11 +173,22 @@ class HatchiBot(sc2.BotAI):
         return self.units(CARRIER)
 
     @property
+    def ideal_nexus_count(self):
+        return self.units(PROBE).ready.amount * 22
+
+    @property
+    def active_nexuses(self):
+        # TODO: I want to create a number of active expansions. active expansions are expansions that are ready and have - 7/13/2018
+        # TODO: an ideal number of workers. Active Expansions have 8 mineral fields and 2 vespene geysers - 7/13/2018
+        return
+
+    @property
     def enemy_threats(self):
         return self.known_enemy_units.not_structure
 
     @property
     def near_by_enemy_threats(self):
+        # TODO: This logic could be improved for performance. Don't know how yet - 7/11/2018
         total = None
         for nexus in self.nexuses:
             group = self.enemy_threats.filter(lambda unit: self.enemy_threats.closer_than(20, nexus))
@@ -190,6 +222,13 @@ class HatchiBot(sc2.BotAI):
     def ready_idle_attacking_units(self):
         return self.idle_attacking_units.ready
 
+    @property
+    def sky_protoss_check(self):
+        if self.units(NEXUS).ready.amount >= 4:
+            return True
+        else:
+            return False
+
     async def message_send(self):
         await self.chat_send(f"{self.name} Online - Version {self.version}")
         await self.chat_send(f"Last Build Date: {self.last_build_date}")
@@ -203,8 +242,8 @@ class HatchiBot(sc2.BotAI):
 
         if iteration == 0:
             self.time_last = time()
-        if iteration % 250 == 0:
-            if self.debug:
+        if self.debug:
+            if iteration % 250 == 0:
                 await self.chat_send(f"Iteration: {iteration}")
         if iteration % 1000 == 0 and iteration > 0:
             current_time = time()
@@ -213,54 +252,34 @@ class HatchiBot(sc2.BotAI):
             if self.debug:
                 await self.chat_send(f'Iterations Per Second: {self.iterations_per_second}')
 
+        # Strategy Check
+        if self.sky_protoss_check:
+            self.sky_protoss_switch = True
+
         # Worker Distribution Logic
         await self.distribute_workers()
 
         # Build Order Priority
-        await self.expand()
-        await self.build_pylon()
-        await self.build_assimilator()
-        await self.build_worker()
+        await self.expansion_commander()
 
         # Upgrades
         await self.upgrade_gateways()
         await self.upgrade_warpgate()
 
-        if self.minerals > 100:
-            await self.upgrade_graviton_catapult()
-            await self.upgrade_thermal_lance()
-            await self.upgrade_zealot_charge()
-            await self.upgrade_gravitic_boosters()
-            await self.upgrade_resonating_glaives()
-            # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
-            await self.upgrade_ground_weapons()
-            await self.upgrade_ground_armor()
+        if self.minerals > 100 and self.priority_building is None:
+            await self.upgrade_commander()
 
         # Building Tech
-            await self.build_fleet_beacon()
-            await self.build_robotics_bay()
-            await self.build_robotics_facility()
-            await self.build_twilight_council()
-            await self.build_stargate()
-            await self.build_forge()
-            await self.build_cybernetics_core()
-            await self.build_gateway()
+            await self.building_commander()
 
         # Build Units
-            await self.build_observers()
-            await self.build_carriers()
-            await self.build_colossus()
-            await self.build_immortals()
-            await self.build_voidrays()
-            await self.build_stalkers()
-            await self.build_adepts()
-            await self.build_sentries()
-            await self.build_zealots()
+            await self.recruit_commander()
 
         # Attack
-        await self.defend()
-        await self.attack()
-        await self.reposition()
+        await self.army_commander()
+
+    def soft_max_assimilators(self):
+        return self.units(NEXUS).ready.amount * 2
 
     def soft_max_gateways(self):
         return 1 + ((self.units(NEXUS).ready.amount - 1) * 2)
@@ -284,7 +303,7 @@ class HatchiBot(sc2.BotAI):
         return self.units(NEXUS).ready.amount * 3
 
     def soft_max_adepts(self):
-        return self.units(NEXUS).ready.amount * 2
+        return self.units(NEXUS).ready.amount * 1
 
     def soft_max_sentries(self):
         return self.units(NEXUS).ready.amount * 1
@@ -389,9 +408,11 @@ class HatchiBot(sc2.BotAI):
                self.can_afford(FORGE)
 
     async def can_build_cyberneticscore(self):
+        if self.sky_protoss_switch:
+            self.max_cyberneticscore = 2
         return self.units(PYLON).ready.amount > 0 and \
                self.units(GATEWAY).ready.amount > 0 and \
-               self.units(CYBERNETICSCORE).amount < 1 and \
+               self.units(CYBERNETICSCORE).amount < self.max_cyberneticscore and \
                self.can_afford(CYBERNETICSCORE) and not \
                self.already_pending(CYBERNETICSCORE) and not \
                self.fast_expand
@@ -454,10 +475,14 @@ class HatchiBot(sc2.BotAI):
                     await self.build(PYLON, near=nexuses.random.position.towards(self.game_info.map_center, 8))
 
     async def expand(self):
+        if self.ideal_nexus_count < self.units(NEXUS).ready.amount and not self.already_pending(NEXUS):
+            self.priority_building = NEXUS
         if await self.can_build_nexus():
             await self.expand_now()
             if self.fast_expand:
                 self.fast_expand = False
+            if self.priority_building == NEXUS:
+                self.priority_building = None
 
     async def build_assimilator(self):
         for nexus in self.units(NEXUS).ready:
@@ -710,7 +735,7 @@ class HatchiBot(sc2.BotAI):
                         self.PROTOSSGROUNDWEAPONSLEVEL3 = True
 
     async def upgrade_ground_armor(self):
-        if not self.PROTOSSGROUNDARMORLEVEL1:
+        if not self.PROTOSSGROUNDARMORLEVEL3:
             if self.units(NEXUS).ready.amount > 2:
                 forge = self.units(FORGE).ready.random
                 if not self.PROTOSSGROUNDARMORLEVEL1 and forge.noqueue:
@@ -735,6 +760,58 @@ class HatchiBot(sc2.BotAI):
                         await self.use_chronoboost(forge)
                         self.PROTOSSGROUNDARMORLEVEL3 = True
 
+    async def upgrade_air_weapons(self):
+        if not self.PROTOSSAIRWEAPONSLEVEL3:
+            if self.sky_protoss_switch:
+                cc = self.units(CYBERNETICSCORE).ready.random
+                if not self.PROTOSSAIRWEAPONSLEVEL1 and cc.noqueue:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL1):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL1))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRWEAPONSLEVEL1 = True
+                if not self.PROTOSSAIRWEAPONSLEVEL2 and \
+                        self.PROTOSSAIRWEAPONSLEVEL1 and \
+                        cc.noqueue and \
+                        self.units(FLEETBEACON).ready.amount > 0:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL2):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL2))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRWEAPONSLEVEL2 = True
+                if not self.PROTOSSAIRWEAPONSLEVEL3 and \
+                        self.PROTOSSAIRWEAPONSLEVEL2 and \
+                        cc.noqueue and \
+                        self.units(FLEETBEACON).ready.amount > 0:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL3):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRWEAPONSLEVEL3))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRWEAPONSLEVEL3 = True
+
+    async def upgrade_air_armor(self):
+        if not self.PROTOSSAIRARMORLEVEL3:
+            if self.sky_protoss_switch:
+                cc = self.units(CYBERNETICSCORE).ready.random
+                if not self.PROTOSSAIRARMORLEVEL1 and cc.noqueue:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL1):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL1))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRARMORLEVEL1 = True
+                if not self.PROTOSSAIRARMORLEVEL2 and \
+                        self.PROTOSSAIRARMORLEVEL1 and \
+                        cc.noqueue and \
+                        self.units(FLEETBEACON).ready.amount > 0:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL2):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL2))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRARMORLEVEL2 = True
+                if not self.PROTOSSAIRARMORLEVEL3 and \
+                        self.PROTOSSAIRARMORLEVEL2 and \
+                        cc.noqueue and \
+                        self.units(FLEETBEACON).ready.amount > 0:
+                    if self.can_afford(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL3):
+                        await self.do(cc(CYBERNETICSCORERESEARCH_PROTOSSAIRARMORLEVEL3))
+                        await self.use_chronoboost(cc)
+                        self.PROTOSSAIRARMORLEVEL3 = True
+
     async def use_chronoboost(self, building):
         for nexus in self.units(NEXUS).ready:
             if nexus.energy > 50:
@@ -754,6 +831,7 @@ class HatchiBot(sc2.BotAI):
         return self.game_info.map_center.towards(self.enemy_start_locations[0], 120 / self.units(NEXUS).amount)
 
     def total_army_value(self, units):
+        # TODO: This logic could be improved for better performance. 7/11/2018
         total = 0
         for unit in units:
             total += unit._type_data.cost.minerals + (unit._type_data.cost.vespene * 1.20)
@@ -782,7 +860,7 @@ class HatchiBot(sc2.BotAI):
                 self.attacking = False
             await self.retreat()
             return
-        if self.ready_attacking_units.amount > self.number_of_attacking_units:
+        if 200 - self.supply_used <= 10 or self.attacking:
             if not self.attacking:
                 if self.debug:
                     await self.chat_send("Looks like we are Attacking!")
@@ -797,7 +875,7 @@ class HatchiBot(sc2.BotAI):
             if self.should_we_retreat():
                 await self.retreat()
                 return
-            if self.ready_attacking_units.amount > 3:
+            if self.ready_attacking_units.amount > 1:
                 if self.near_by_enemy_threats.amount > 0:
                     if not self.defending:
                         if self.debug:
@@ -835,9 +913,68 @@ class HatchiBot(sc2.BotAI):
             await self.do(s.move(self.reposition_location()))
 
     async def regroup(self, units, location):
+        # TODO: This Method is not yet implemented. Waiting on better logic for finding a regroup location - 7/13/2018
         group = units.filter(lambda unit: unit.distance_to(location) > 5)
         for s in group:
             await self.do(s.move(location))
+
+    async def expansion_commander(self):
+        # TODO: Incorporate Expansion Priority Here - 7/13/2018
+        await self.expand()
+        await self.build_pylon()
+        if self.units(ASSIMILATOR).amount < self.soft_max_assimilators():
+            await self.build_assimilator()
+        await self.build_worker()
+
+    async def worker_commander(self):
+        # TODO: Incorporate Worker Recruitment Here - 7/13/2018
+        pass
+
+    async def building_commander(self):
+        # TODO: Incorporate Building Priority Here - 7/13/2018
+        await self.build_fleet_beacon()
+        await self.build_robotics_bay()
+        await self.build_robotics_facility()
+        await self.build_twilight_council()
+        await self.build_stargate()
+        await self.build_forge()
+        await self.build_cybernetics_core()
+        await self.build_gateway()
+
+    async def recruit_commander(self):
+        # TODO: Incorporate Unit Recruitment Here - 7/13/2018
+        await self.build_observers()
+        await self.build_carriers()
+        await self.build_colossus()
+        await self.build_immortals()
+        await self.build_voidrays()
+        if not self.sky_protoss_switch:
+            await self.build_stalkers()
+            await self.build_adepts()
+            await self.build_sentries()
+            await self.build_zealots()
+
+    async def upgrade_commander(self):
+        # TODO: Incorporate Upgrade Tactic into Here - 7/13/2018
+        # TODO: It's possible for upgrade flags to be turned to True even if the upgrade hasn't triggered. - 7/13/2018
+        await self.upgrade_graviton_catapult()
+        await self.upgrade_thermal_lance()
+        await self.upgrade_zealot_charge()
+        await self.upgrade_gravitic_boosters()
+        await self.upgrade_resonating_glaives()
+        # await self.upgrade_stalker_blink() # Right now I don't have any Blink Logic - its useless
+        if not self.sky_protoss_switch:
+            await self.upgrade_ground_weapons()
+            await self.upgrade_ground_armor()
+        else:
+            await self.upgrade_air_weapons()
+            await self.upgrade_air_armor()
+
+    async def army_commander(self):
+        # TODO: Incorporate Troop Tactic into Here - 7/13/2018
+        await self.defend()
+        await self.attack()
+        await self.reposition()
 
     def __repr__(self):
         return f'{self.name} - {self.version} - {self.last_build_date}'
@@ -846,7 +983,7 @@ class HatchiBot(sc2.BotAI):
 if __name__ == '__main__':
 
     Races = [Race.Protoss, Race.Terran, Race.Zerg]
-    Difficulties = [Difficulty.Hard]
+    Difficulties = [Difficulty.Hard, Difficulty.Harder, Difficulty.VeryHard]
     Maps = ["BlackpinkLE"]
 
     run_game(maps.get(random.choice(Maps)), [
